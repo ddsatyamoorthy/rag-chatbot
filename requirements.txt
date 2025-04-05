@@ -1,10 +1,9 @@
-
 streamlit
 langchain
 langchain-community
 sentence-transformers
-chromadb
+faiss-cpu
 pypdf
 transformers==4.35.2
-torch==2.4.0+cpu
-numpy==1.26.4
+torch
+numpy<2
