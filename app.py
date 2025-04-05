@@ -5,22 +5,26 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from transformers import pipeline
 
+# STEP 1: Load and chunk the PDF
 def process_pdf(pdf_path):
     loader = PyPDFLoader(pdf_path)
     documents = loader.load()
     splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
     return splitter.split_documents(documents)
 
+# STEP 2: Create vectorstore using HuggingFace embeddings + FAISS
 def create_vectorstore(chunks):
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     return FAISS.from_documents(chunks, embeddings)
 
+# STEP 3: Load lightweight open-source model for Streamlit
 def load_llm():
-    return pipeline("text-generation", model="distilgpt2")
+    return pipeline("text2text-generation", model="google/flan-t5-base")
 
+# STEP 4: Streamlit UI
 def main():
     st.set_page_config(page_title="RAG PDF Chatbot", layout="wide")
-    st.title("📘 RAG-Based Document Chatbot")
+    st.title("📘 RAG-Based Document Chatbot (Debug Mode Enabled)")
 
     uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
     if uploaded_file:
@@ -32,35 +36,47 @@ def main():
             vectorstore = create_vectorstore(chunks)
             llm = load_llm()
 
-        st.success("✅ Document processed! Ask your question below.")
-        query = st.text_input("Ask a question about the document:")
+        st.success("✅ Document processed successfully. Ask your question below.")
 
+        query = st.text_input("❓ Ask a question about the document:")
         if query:
-            retriever = vectorstore.as_retriever(search_type="similarity", k=3)
+            retriever = vectorstore.as_retriever(search_type="similarity", k=8)  # Increased k for better recall
             docs = retriever.get_relevant_documents(query)
             context = "\n\n".join([doc.page_content for doc in docs])
 
-            # 🧠 Trim context for small LLMs like GPT2
-            MAX_CONTEXT_CHARS = 1200
+            # Limit token length for model
+            MAX_CONTEXT_CHARS = 1500
             short_context = context[:MAX_CONTEXT_CHARS]
 
-            # 📄 Final prompt
+            # Add prompt with slight flexibility
             prompt = f"""
-You are a helpful assistant. Use the context below to answer the question.
-Only use the info provided. If the answer is not found, say: 'Not found in document.'
+You are a helpful assistant. Use only the following context to answer the question. 
+If the answer is clearly not present, say "Not found in document."
 
 Context:
 {short_context}
 
 Question: {query}
-Answer:"""
 
-            with st.spinner("🧠 Thinking..."):
-                response = llm(prompt, max_new_tokens=300)[0]['generated_text']
-                answer = response.split("Answer:")[-1].strip()
+Answer:
+"""
+
+            with st.spinner("🧠 Generating answer..."):
+                response = llm(prompt, max_new_tokens=256)[0]["generated_text"]
+                answer = response.strip()
 
             st.markdown("### 💡 Answer")
             st.write(answer)
+
+            # Show context for debugging
+            with st.expander("🧠 Retrieved Context (for debugging)"):
+                st.write(short_context)
+
+            # Show all matched chunks (for validation)
+            with st.expander("📄 Top Retrieved Chunks"):
+                for i, doc in enumerate(docs):
+                    st.markdown(f"**Chunk {i+1}:**")
+                    st.text(doc.page_content[:500])
 
 if __name__ == "__main__":
     main()
