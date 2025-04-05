@@ -24,7 +24,7 @@ def load_llm():
 # STEP 4: Streamlit UI
 def main():
     st.set_page_config(page_title="RAG PDF Chatbot", layout="wide")
-    st.title("📘 RAG-Based Document Chatbot (Debug Mode Enabled)")
+    st.title("📘 RAG-Based Document Chatbot")
 
     uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
     if uploaded_file:
