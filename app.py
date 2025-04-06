@@ -1,7 +1,7 @@
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from transformers import pipeline
 
@@ -14,10 +14,13 @@ def process_pdf(pdf_path):
 
 # STEP 2: Create vectorstore using HuggingFace embeddings + FAISS
 def create_vectorstore(chunks):
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        cache_folder="./hf_cache"  # Helps Streamlit cache the model
+    )
     return FAISS.from_documents(chunks, embeddings)
 
-# STEP 3: Load lightweight open-source model for Streamlit
+# STEP 3: Load lightweight open-source model for Q&A
 def load_llm():
     return pipeline("text2text-generation", model="google/flan-t5-base")
 
@@ -40,7 +43,7 @@ def main():
 
         query = st.text_input("❓ Ask a question about the document:")
         if query:
-            retriever = vectorstore.as_retriever(search_type="similarity", k=8)  # Increased k for better recall
+            retriever = vectorstore.as_retriever(search_type="similarity", k=8)
             docs = retriever.get_relevant_documents(query)
             context = "\n\n".join([doc.page_content for doc in docs])
 
@@ -48,7 +51,6 @@ def main():
             MAX_CONTEXT_CHARS = 1500
             short_context = context[:MAX_CONTEXT_CHARS]
 
-            # Add prompt with slight flexibility
             prompt = f"""
 You are a helpful assistant. Use only the following context to answer the question. 
 If the answer is clearly not present, say "Not found in document."
@@ -68,11 +70,9 @@ Answer:
             st.markdown("### 💡 Answer")
             st.write(answer)
 
-            # Show context for debugging
             with st.expander("🧠 Retrieved Context (for debugging)"):
                 st.write(short_context)
 
-            # Show all matched chunks (for validation)
             with st.expander("📄 Top Retrieved Chunks"):
                 for i, doc in enumerate(docs):
                     st.markdown(f"**Chunk {i+1}:**")
