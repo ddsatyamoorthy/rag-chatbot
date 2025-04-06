@@ -1,10 +1,10 @@
-streamlit==1.32.0
+streamlit
 langchain==0.1.16
-langchain-community==0.0.34
-langchain-huggingface==0.1.2
+langchain-community==0.0.30
+langchain-huggingface
 sentence-transformers==2.6.1
-faiss-cpu==1.7.4
-pypdf==3.17.4
+faiss-cpu
+pypdf
 transformers==4.35.2
 torch==2.2.1
 numpy<2
