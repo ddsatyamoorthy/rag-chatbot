@@ -1,9 +1,10 @@
 streamlit
-langchain
-langchain-community
-sentence-transformers
+langchain==0.1.16
+langchain-community==0.0.30
+langchain-huggingface
+sentence-transformers==2.6.1
 faiss-cpu
 pypdf
 transformers==4.35.2
-torch
+torch==2.2.1
 numpy<2
