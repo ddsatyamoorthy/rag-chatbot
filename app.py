@@ -2,13 +2,8 @@ import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
-
-try:
-    from transformers import pipeline
-except ImportError as e:
-    st.error(f"Critical dependency error: {str(e)}")
-    st.stop()
+from langchain_community.embeddings import SentenceTransformerEmbeddings
+from transformers import pipeline
 
 def process_pdf(pdf_path):
     loader = PyPDFLoader(pdf_path)
@@ -22,11 +17,11 @@ def process_pdf(pdf_path):
 
 def create_vectorstore(chunks):
     try:
-        embeddings = HuggingFaceEmbeddings(
+        embeddings = SentenceTransformerEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
 
-        # Test embedding
+        # Check embedding output
         test_embed = embeddings.embed_query("test")
         if not isinstance(test_embed, list) or len(test_embed) == 0:
             raise ValueError("Embedding generation failed")
