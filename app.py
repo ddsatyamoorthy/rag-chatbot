@@ -1,10 +1,16 @@
 import streamlit as st
+import sys
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
-from transformers import pipeline
 
+try:
+    from transformers import pipeline
+except ImportError as e:
+    st.error(f"Critical dependency error: {str(e)}")
+    st.stop()
+    
 def process_pdf(pdf_path):
     loader = PyPDFLoader(pdf_path)
     pages = loader.load()
