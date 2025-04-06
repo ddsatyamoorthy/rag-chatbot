@@ -2,8 +2,7 @@ import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import SentenceTransformerEmbeddings
-from transformers import pipeline
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 
 def process_pdf(pdf_path):
     loader = PyPDFLoader(pdf_path)
@@ -17,40 +16,30 @@ def process_pdf(pdf_path):
 
 def create_vectorstore(chunks):
     try:
-        embeddings = SentenceTransformerEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
-
-        # Check embedding output
-        test_embed = embeddings.embed_query("test")
-        if not isinstance(test_embed, list) or len(test_embed) == 0:
-            raise ValueError("Embedding generation failed")
-
+        if not st.secrets.get("OPENAI_API_KEY"):
+            st.error("❌ Missing OpenAI API key in Streamlit secrets!")
+            raise ValueError("Missing OPENAI_API_KEY")
+        
+        embeddings = OpenAIEmbeddings(openai_api_key=st.secrets["OPENAI_API_KEY"])
         return FAISS.from_documents(chunks, embeddings)
     except Exception as e:
         st.error(f"❌ Vector store creation failed: {str(e)}")
         raise
 
 def load_llm():
-    return pipeline(
-        "text2text-generation",
-        model="google/flan-t5-base",
-        device_map="auto",
-        torch_dtype="auto"
+    return ChatOpenAI(
+        openai_api_key=st.secrets["OPENAI_API_KEY"],
+        model_name="gpt-3.5-turbo",
+        temperature=0.3
     )
 
 def get_answer(query, vectorstore, llm):
     try:
         docs = vectorstore.similarity_search(query, k=3)
         context = "\n\n".join([doc.page_content for doc in docs])
-        prompt = f"Answer based on context:\n{context}\n\nQuestion: {query}\nAnswer:"
-        result = llm(
-            prompt,
-            max_length=500,
-            num_return_sequences=1,
-            temperature=0.3
-        )
-        return result[0]["generated_text"], docs
+        prompt = f"Answer the following question based on the context:\n\nContext:\n{context}\n\nQuestion: {query}\nAnswer:"
+        response = llm.invoke(prompt)
+        return response.content, docs
     except Exception as e:
         st.error(f"❌ Answer generation failed: {str(e)}")
         raise
@@ -60,7 +49,7 @@ def main():
     st.title("📄 RAG PDF Chatbot")
 
     uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
-
+    
     if uploaded_file:
         try:
             with open("temp.pdf", "wb") as f:
