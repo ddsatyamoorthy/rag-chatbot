@@ -1,18 +1,20 @@
 import streamlit as st
 from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceInferenceAPIEmbeddings
+from langchain_huggingface import HuggingFaceInferenceAPIEmbeddings
 from transformers import pipeline
 
-# STEP 1: Load and split PDF
 def process_pdf(pdf_path):
     loader = PyPDFLoader(pdf_path)
     pages = loader.load()
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=500,
+        chunk_overlap=50,
+        separators=["\n\n", "\n", " ", ""]
+    )
     return splitter.split_documents(pages)
 
-# STEP 2: Create vectorstore using Hugging Face API embeddings
 def create_vectorstore(chunks):
     embeddings = HuggingFaceInferenceAPIEmbeddings(
         api_key=st.secrets["HF_API_TOKEN"],
@@ -20,19 +22,25 @@ def create_vectorstore(chunks):
     )
     return FAISS.from_documents(chunks, embeddings)
 
-# STEP 3: Load the QA model
 def load_llm():
-    return pipeline("text2text-generation", model="google/flan-t5-base")
+    return pipeline(
+        "text2text-generation",
+        model="google/flan-t5-base",
+        device_map="auto"
+    )
 
-# STEP 4: Answer questions using context and model
 def get_answer(query, vectorstore, llm):
     docs = vectorstore.similarity_search(query, k=3)
-    context = " ".join([doc.page_content for doc in docs])
-    prompt = f"Context: {context}\n\nQuestion: {query}\nAnswer:"
-    result = llm(prompt, max_length=300, do_sample=False)
+    context = "\n\n".join([doc.page_content for doc in docs])
+    prompt = f"Answer based on context:\n{context}\n\nQuestion: {query}\nAnswer:"
+    result = llm(
+        prompt,
+        max_length=500,
+        num_return_sequences=1,
+        temperature=0.3
+    )
     return result[0]["generated_text"], docs
 
-# STREAMLIT UI
 def main():
     st.set_page_config(page_title="📄 RAG PDF Chatbot", layout="wide")
     st.title("📄 RAG PDF Chatbot")
@@ -42,8 +50,8 @@ def main():
 
     if uploaded_file:
         with open("temp.pdf", "wb") as f:
-            f.write(uploaded_file.read())
-
+            f.write(uploaded_file.getbuffer())
+        
         with st.spinner("🔍 Reading & indexing document..."):
             chunks = process_pdf("temp.pdf")
             vectorstore = create_vectorstore(chunks)
@@ -56,9 +64,11 @@ def main():
             answer, docs = get_answer(query, vectorstore, llm)
             st.markdown("### ✅ Answer")
             st.write(answer)
-            with st.expander("🔍 Source Chunks"):
-                for doc in docs:
-                    st.text(doc.page_content[:500])
+            
+            with st.expander("🔍 Relevant Document Chunks"):
+                for i, doc in enumerate(docs, 1):
+                    st.markdown(f"**Chunk {i}**")
+                    st.info(doc.page_content[:500] + "...")
 
 if __name__ == "__main__":
     main()
