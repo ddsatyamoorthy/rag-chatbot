@@ -5,31 +5,38 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from transformers import pipeline
 
-# STEP 1: Load and chunk the PDF
+# STEP 1: Load & split PDF
 def process_pdf(pdf_path):
     loader = PyPDFLoader(pdf_path)
-    documents = loader.load()
-    splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
-    return splitter.split_documents(documents)
+    pages = loader.load()
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+    return text_splitter.split_documents(pages)
 
 # STEP 2: Create vectorstore using HuggingFace embeddings + FAISS
 def create_vectorstore(chunks):
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-        cache_folder="./hf_cache"  # Helps Streamlit cache the model
-    )
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-MiniLM-L6-v2")
     return FAISS.from_documents(chunks, embeddings)
 
-# STEP 3: Load lightweight open-source model for Q&A
+# STEP 3: Load lightweight open-source model
 def load_llm():
     return pipeline("text2text-generation", model="google/flan-t5-base")
 
-# STEP 4: Streamlit UI
-def main():
-    st.set_page_config(page_title="RAG PDF Chatbot", layout="wide")
-    st.title("📘 RAG-Based Document Chatbot")
+# STEP 4: Ask question
+def ask_question(vectorstore, llm, question):
+    docs = vectorstore.similarity_search(question, k=3)
+    context = "\n\n".join([doc.page_content for doc in docs])
+    prompt = f"Answer based on context:\n\n{context}\n\nQuestion: {question}"
+    response = llm(prompt, max_length=300, do_sample=False)[0]['generated_text']
+    return response, docs
 
-    uploaded_file = st.file_uploader("Upload a PDF", type="pdf")
+# Streamlit UI
+def main():
+    st.set_page_config(page_title="RAG PDF Chatbot")
+    st.title("📄 RAG-based PDF Chatbot")
+    st.markdown("Upload a PDF and ask questions from it!")
+
+    uploaded_file = st.file_uploader("Upload PDF", type="pdf")
+
     if uploaded_file:
         with open("temp.pdf", "wb") as f:
             f.write(uploaded_file.read())
@@ -39,44 +46,17 @@ def main():
             vectorstore = create_vectorstore(chunks)
             llm = load_llm()
 
-        st.success("✅ Document processed successfully. Ask your question below.")
+        st.success("✅ Document processed successfully. Ask your questions below!")
 
-        query = st.text_input("❓ Ask a question about the document:")
-        if query:
-            retriever = vectorstore.as_retriever(search_type="similarity", k=8)
-            docs = retriever.get_relevant_documents(query)
-            context = "\n\n".join([doc.page_content for doc in docs])
-
-            # Limit token length for model
-            MAX_CONTEXT_CHARS = 1500
-            short_context = context[:MAX_CONTEXT_CHARS]
-
-            prompt = f"""
-You are a helpful assistant. Use only the following context to answer the question. 
-If the answer is clearly not present, say "Not found in document."
-
-Context:
-{short_context}
-
-Question: {query}
-
-Answer:
-"""
-
-            with st.spinner("🧠 Generating answer..."):
-                response = llm(prompt, max_new_tokens=256)[0]["generated_text"]
-                answer = response.strip()
-
-            st.markdown("### 💡 Answer")
-            st.write(answer)
-
-            with st.expander("🧠 Retrieved Context (for debugging)"):
-                st.write(short_context)
-
-            with st.expander("📄 Top Retrieved Chunks"):
-                for i, doc in enumerate(docs):
-                    st.markdown(f"**Chunk {i+1}:**")
-                    st.text(doc.page_content[:500])
+        question = st.text_input("❓ Ask a question")
+        if question:
+            with st.spinner("🤖 Generating answer..."):
+                response, docs = ask_question(vectorstore, llm, question)
+                st.markdown("### 📌 Answer")
+                st.write(response)
+                with st.expander("📚 Context"):
+                    for doc in docs:
+                        st.text(doc.page_content[:500])
 
 if __name__ == "__main__":
     main()
